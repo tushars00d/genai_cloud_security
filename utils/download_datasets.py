@@ -86,8 +86,9 @@ def generate_cicids_sample():
         "DoS slowloris", "Bot", "Web Attack – Brute Force",
         "Web Attack – XSS", "Infiltration", "Heartbleed", "Web Attack – Sql Injection"
     ]
-    weights = [0.50, 0.12, 0.10, 0.08, 0.05, 0.04, 0.04, 0.03, 0.02, 0.005,
-               0.005, 0.002, 0.001, 0.001]
+    weights = np.array([0.50, 0.12, 0.10, 0.08, 0.05, 0.04, 0.04, 0.03, 0.02, 0.005,
+                        0.005, 0.002, 0.001, 0.001])
+    weights = weights / weights.sum()
 
     labels = np.random.choice(attack_types, size=n, p=weights)
 
