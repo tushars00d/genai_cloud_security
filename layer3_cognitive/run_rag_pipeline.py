@@ -14,6 +14,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import json
+import re
 import pandas as pd
 import numpy as np
 from datetime import datetime
@@ -23,6 +24,22 @@ from config import DATA_DIR, RESULTS_DIR, MLFLOW_TRACKING_URI, EXPERIMENT_NAME, 
 from utils.metrics import save_results_csv, Timer
 
 _LLM_DISABLED_REASON = None
+
+
+def _coerce_float(value, default=0.0):
+    """Best-effort conversion for LLM-emitted numeric fields."""
+    if value is None:
+        return float(default)
+    if isinstance(value, (int, float, np.number)):
+        return float(value)
+    if isinstance(value, str):
+        match = re.search(r"-?\d+(?:\.\d+)?", value)
+        if match:
+            try:
+                return float(match.group(0))
+            except ValueError:
+                pass
+    return float(default)
 
 
 # ── MITRE ATT&CK Knowledge Base ────────────────────────────────────────────────
@@ -294,9 +311,9 @@ Analyse this incident and provide structured root cause analysis."""
         "gt_root_cause":        incident.get("ground_truth_root_cause", ""),
         "pred_root_cause":      analysis.get("root_cause", ""),
         "cause_correct":        int(cause_correct),
-        "severity":             analysis.get("severity_assessment", "UNKNOWN"),
-        "confidence":           analysis.get("confidence", 0.0),
-        "response_time_s":      round(response_time, 3),
+        "severity":             str(analysis.get("severity_assessment", "UNKNOWN")).upper(),
+        "confidence":           round(_coerce_float(analysis.get("confidence", 0.0), 0.0), 4),
+        "response_time_s":      round(_coerce_float(response_time, 0.0), 3),
         "immediate_actions":    analysis.get("immediate_actions", ""),
         "retrieved_docs":       len(retrieved),
     }
@@ -323,6 +340,9 @@ def supervisor_synthesise(incident_results: list[dict]) -> dict:
     # Check for multi-stage attack pattern
     multi_stage = len(tactics_seen) >= 3
 
+    confidences = [_coerce_float(r.get("confidence", 0.0), 0.0) for r in incident_results]
+    response_times = [_coerce_float(r.get("response_time_s", 0.0), 0.0) for r in incident_results]
+
     summary = {
         "total_incidents_analysed": len(incident_results),
         "critical_count": len(critical),
@@ -330,8 +350,8 @@ def supervisor_synthesise(incident_results: list[dict]) -> dict:
         "unique_tactics": list(tactics_seen),
         "unique_techniques": list(techniques_seen),
         "multi_stage_attack_detected": multi_stage,
-        "avg_confidence": round(np.mean([r["confidence"] for r in incident_results]), 3),
-        "avg_response_time_s": round(np.mean([r["response_time_s"] for r in incident_results]), 3),
+        "avg_confidence": round(float(np.mean(confidences)) if confidences else 0.0, 3),
+        "avg_response_time_s": round(float(np.mean(response_times)) if response_times else 0.0, 3),
         "recommendation": (
             "ESCALATE: Multi-stage attack campaign detected across multiple tactics. "
             "Immediate isolation of affected resources recommended."
@@ -387,8 +407,8 @@ def run_layer3_experiment():
     # Metrics
     mitre_acc   = np.mean([r["technique_correct"] for r in results])
     cause_acc   = np.mean([r["cause_correct"]     for r in results])
-    avg_conf    = np.mean([r["confidence"]         for r in results])
-    avg_time    = np.mean([r["response_time_s"]    for r in results])
+    avg_conf    = float(np.mean([_coerce_float(r.get("confidence", 0.0), 0.0) for r in results]))
+    avg_time    = float(np.mean([_coerce_float(r.get("response_time_s", 0.0), 0.0) for r in results]))
 
     print(f"\n[4/4] Results:")
     print(f"  MITRE ATT&CK mapping accuracy: {mitre_acc:.2%}")
