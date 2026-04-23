@@ -68,7 +68,7 @@ class TabularDDPM(nn.Module):
         self.time_emb = SinusoidalPosEmb(time_dim)
         self.class_emb = nn.Embedding(num_classes, time_dim)
         self.net = nn.Sequential(
-            nn.Linear(input_dim + time_dim * 2, hidden_dim),
+            nn.Linear(input_dim + time_dim, hidden_dim),
             nn.SiLU(),
             nn.Linear(hidden_dim, hidden_dim * 2),
             nn.SiLU(),
