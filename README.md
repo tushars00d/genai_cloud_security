@@ -24,22 +24,73 @@ genai_cloud_security/
 
 ---
 
-## Quick Start (Google Colab)
+## Quick Start (Google Colab Free)
+
+1. Open [Google Colab](https://colab.research.google.com/).
+2. Select `Runtime -> Change runtime type -> T4 GPU`.
+3. Run the setup cell below.
 
 ```python
-# Cell 1 — Clone and install
-!git clone https://github.com/YOUR_USERNAME/genai_cloud_security
+# Cell 1 - Clone and install
+!git clone https://github.com/tushars00d/genai_cloud_security.git
 %cd genai_cloud_security
 !pip install -r requirements.txt
-
-# Cell 2 — Download datasets
-!python utils/download_datasets.py
-
-# Cell 3 — Run a specific layer
-!python layer1_data/train_ddpm.py
-!python layer2_detection/train_ids.py
-!python layer3_cognitive/run_rag_pipeline.py
 ```
+
+4. Generate/download the Colab-scale datasets.
+
+```python
+# Cell 2 - Prepare datasets
+!python utils/download_datasets.py
+```
+
+5. Run a quick smoke test first. This is recommended on Colab Free.
+
+```python
+# Cell 3 - Fast reproducibility check
+!python run_all.py --quick --skip-l1
+```
+
+6. Run the full dissertation pipeline when the smoke test succeeds.
+
+```python
+# Cell 4 - Full run
+!python run_all.py
+```
+
+7. If Layer 1 is too slow for the free GPU quota, run the defensible partial pipeline.
+
+```python
+# Cell 5 - Full pipeline except slow DDPM/GAN training
+!python run_all.py --skip-l1
+```
+
+8. Optional LLM setup for Layer 3.
+
+```python
+import os
+os.environ["LLM_PROVIDER"] = "groq"
+os.environ["GROQ_API_KEY"] = "paste_your_groq_key_here"
+```
+
+If no API key is set, Layer 3 uses the deterministic offline fallback so the dissertation pipeline remains reproducible.
+
+## Outputs
+
+All outputs are written to `results/`:
+
+- `layer1_augmentation_comparison.csv`
+- `layer2_detection_comparison.csv`
+- `layer2_purification_experiment.csv`
+- `layer3_rag_analysis_results.csv`
+- `layer4_autonomy_comparison.csv`
+- `layer5_autonomy_policy_results.csv`
+- `DISSERTATION_RESULTS_DASHBOARD.png`
+- MLflow runs under `results/mlruns`
+
+## Dissertation Notes
+
+See `docs/5l_model_research_review.md` for the technical explanation of the 5L Model, gap analysis, baselines, examiner questions, and dissertation-ready methodology text.
 
 ---
 

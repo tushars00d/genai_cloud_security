@@ -19,6 +19,8 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.neural_network import MLPClassifier
 from sklearn.model_selection import train_test_split
 import mlflow
 
@@ -209,17 +211,37 @@ def run_layer2_experiment():
     )
 
     # ── Exp A: Detection accuracy comparison ──
-    print("\n[2/7] Exp A: Baseline Random Forest...")
-    clf_rf = RandomForestClassifier(n_estimators=100, random_state=42, n_jobs=-1)
-    clf_rf.fit(X_train, y_train)
-    res_rf = evaluate_classifier(clf_rf.predict(X_test), y_test, label="random_forest")
+    print("\n[2/7] Exp A: Classical baseline models...")
+    baseline_specs = {
+        "logistic_regression": LogisticRegression(
+            max_iter=1000, n_jobs=-1, class_weight="balanced", random_state=42
+        ),
+        "random_forest": RandomForestClassifier(
+            n_estimators=100, random_state=42, n_jobs=-1, class_weight="balanced_subsample"
+        ),
+        "gradient_boosting": GradientBoostingClassifier(random_state=42),
+        "mlp_sklearn": MLPClassifier(
+            hidden_layer_sizes=(128, 64), max_iter=80, early_stopping=True,
+            random_state=42
+        ),
+    }
+
+    baseline_results = []
+    fitted_baselines = {}
+    for label, clf in baseline_specs.items():
+        with Timer(f"{label} training"):
+            clf.fit(X_train, y_train)
+        fitted_baselines[label] = clf
+        baseline_results.append(evaluate_classifier(y_test, clf.predict(X_test), label=label))
+
+    res_rf = next(r for r in baseline_results if r["label"] == "random_forest")
 
     print("\n[3/7] Exp A: Attention-IDS neural model...")
     with Timer("Attention-IDS training"):
         ids_model = train_attention_ids(X_train, y_train, num_classes, device)
     y_pred_ids = predict_ids(ids_model, X_test, device)
-    res_ids = evaluate_classifier(y_pred_ids, y_test, label="attention_ids")
-    plot_confusion_matrix(y_pred_ids, y_test, class_names, label="attention_ids")
+    res_ids = evaluate_classifier(y_test, y_pred_ids, label="attention_ids")
+    plot_confusion_matrix(y_test, y_pred_ids, class_names, label="attention_ids")
 
     # ── Exp B: Adversarial attack ──
     print(f"\n[4/7] Exp B: FGSM adversarial attack (eps={L2['adversarial_eps']})...")
@@ -228,7 +250,7 @@ def run_layer2_experiment():
     X_test_sub, y_test_sub = X_test[idx], y_test[idx]
     X_adv = fgsm_attack(ids_model, X_test_sub, y_test_sub, L2["adversarial_eps"], device)
     y_pred_adv = predict_ids(ids_model, X_adv, device)
-    res_adv = evaluate_classifier(y_pred_adv, y_test_sub, label="under_adversarial_attack")
+    res_adv = evaluate_classifier(y_test_sub, y_pred_adv, label="under_adversarial_attack")
     print(f"  ⚠ Accuracy dropped from {res_ids['accuracy']:.3f} → {res_adv['accuracy']:.3f} under attack!")
 
     # ── Exp C: DDPM purification ──
@@ -236,15 +258,15 @@ def run_layer2_experiment():
     denoiser = train_denoiser(X_train, device)
     X_purified = purify(denoiser, X_adv, device)
     y_pred_pure = predict_ids(ids_model, X_purified, device)
-    res_pure = evaluate_classifier(y_pred_pure, y_test_sub, label="after_purification")
+    res_pure = evaluate_classifier(y_test_sub, y_pred_pure, label="after_purification")
     print(f"  ✅ Accuracy restored: {res_adv['accuracy']:.3f} → {res_pure['accuracy']:.3f}")
 
     # ── Save comparison ──
     print("\n[6/7] Saving results...")
-    det_results = [res_rf, res_ids]
+    det_results = [*baseline_results, res_ids]
     save_results_csv(det_results, "layer2_detection_comparison.csv")
     plot_comparison_bar(det_results, metric="f1_score",
-                        title="Layer 2: Detection F1 — RF vs Attention-IDS")
+                        title="Layer 2: Detection F1 — Baselines vs Attention-IDS")
 
     purif_results = [res_ids, res_adv, res_pure]
     # Fix labels for purification chart
@@ -263,6 +285,8 @@ def run_layer2_experiment():
     with mlflow.start_run(run_name="layer2_detection"):
         mlflow.log_metrics({
             "rf_f1":           res_rf["f1_score"],
+            "gb_f1":           next(r for r in baseline_results if r["label"] == "gradient_boosting")["f1_score"],
+            "mlp_sklearn_f1":  next(r for r in baseline_results if r["label"] == "mlp_sklearn")["f1_score"],
             "ids_f1":          res_ids["f1_score"],
             "ids_acc_clean":   res_ids["accuracy"],
             "ids_acc_attack":  res_adv["accuracy"],
@@ -278,7 +302,8 @@ def run_layer2_experiment():
     print(f"   Accuracy after purif: {res_pure['accuracy']:.4f}")
 
     return {"ids_model": ids_model, "denoiser": denoiser,
-            "results": [res_rf, res_ids, res_adv, res_pure]}
+            "baselines": fitted_baselines,
+            "results": [*baseline_results, res_ids, res_adv, res_pure]}
 
 
 if __name__ == "__main__":

@@ -15,8 +15,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import json
+import os
 import numpy as np
 import pandas as pd
+
+os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
+os.environ.setdefault("XDG_CACHE_HOME", "/tmp")
+
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import seaborn as sns
@@ -351,8 +356,6 @@ def run_layer5_experiment():
     # Try to load real model, else train a quick demo model
     shap_results = {}
     try:
-        from utils.download_datasets import load_nsl_kdd
-        sys.path.insert(0, str(Path(__file__).parent.parent))
         from layer2_detection.train_ids import load_cicids
         X, y, class_names, _ = load_cicids()
         from sklearn.model_selection import train_test_split

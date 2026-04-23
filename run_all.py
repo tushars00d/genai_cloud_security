@@ -82,11 +82,14 @@ def print_final_summary(results: dict, total_time: float):
 
     if "l2" in results and results["l2"]:
         r = results["l2"].get("results", [])
-        if len(r) >= 4:
+        ids = next((x for x in r if x.get("label") == "attention_ids"), None)
+        adv = next((x for x in r if x.get("label") == "under_adversarial_attack"), None)
+        pure = next((x for x in r if x.get("label") == "after_purification"), None)
+        if ids and adv and pure:
             print(f"\n  Layer 2 — Detection + Purification:")
-            print(f"    Attention-IDS F1:     {r[1]['f1_score']:.4f}")
-            print(f"    Acc under attack:     {r[2]['accuracy']:.4f}")
-            print(f"    Acc after purif:      {r[3]['accuracy']:.4f}")
+            print(f"    Attention-IDS F1:     {ids['f1_score']:.4f}")
+            print(f"    Acc under attack:     {adv['accuracy']:.4f}")
+            print(f"    Acc after purif:      {pure['accuracy']:.4f}")
 
     if "l4" in results and results["l4"]:
         mttr = results["l4"].get("mttr_reduction_pct", 0)

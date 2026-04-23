@@ -4,13 +4,18 @@ utils/metrics.py — Shared evaluation helpers used by all layers.
 
 import numpy as np
 import pandas as pd
+import os
+
+os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
+os.environ.setdefault("XDG_CACHE_HOME", "/tmp")
+
 import matplotlib.pyplot as plt
 import seaborn as sns
 from pathlib import Path
 from sklearn.metrics import (
     classification_report, confusion_matrix,
     accuracy_score, f1_score, precision_score,
-    recall_score, roc_auc_score
+    recall_score, roc_auc_score, balanced_accuracy_score
 )
 import json, time
 from datetime import datetime
@@ -23,16 +28,20 @@ def evaluate_classifier(y_true, y_pred, y_prob=None, label="model", save=True):
     """Compute and save full classifier metrics. Returns dict of results."""
     acc  = accuracy_score(y_true, y_pred)
     f1   = f1_score(y_true, y_pred, average="weighted", zero_division=0)
+    macro_f1 = f1_score(y_true, y_pred, average="macro", zero_division=0)
     prec = precision_score(y_true, y_pred, average="weighted", zero_division=0)
     rec  = recall_score(y_true, y_pred, average="weighted", zero_division=0)
+    bal_acc = balanced_accuracy_score(y_true, y_pred)
 
     results = {
-        "label":     label,
-        "accuracy":  round(acc, 4),
-        "f1_score":  round(f1, 4),
-        "precision": round(prec, 4),
-        "recall":    round(rec, 4),
-        "timestamp": datetime.utcnow().isoformat(),
+        "label":             label,
+        "accuracy":          round(acc, 4),
+        "balanced_accuracy": round(bal_acc, 4),
+        "f1_score":          round(f1, 4),
+        "macro_f1":          round(macro_f1, 4),
+        "precision":         round(prec, 4),
+        "recall":            round(rec, 4),
+        "timestamp":         datetime.utcnow().isoformat(),
     }
 
     if y_prob is not None:

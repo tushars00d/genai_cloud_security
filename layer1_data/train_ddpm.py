@@ -75,8 +75,8 @@ class TabularDDPM(nn.Module):
         self.time_emb  = SinusoidalPosEmb(time_dim)
         self.class_emb = nn.Embedding(num_classes, time_dim)
 
-        # input_dim + time_dim (t_emb) + time_dim (c_emb) = input_dim + 2*time_dim
-        net_input = input_dim + time_dim * 2
+        # The denoiser conditions on the sum of time and class embeddings.
+        net_input = input_dim + time_dim
 
         self.net = nn.Sequential(
             nn.Linear(net_input, hidden_dim),
@@ -318,7 +318,7 @@ def run_layer1_experiment():
     with Timer("Baseline RF training"):
         clf_base = RandomForestClassifier(n_estimators=100, random_state=42, n_jobs=-1)
         clf_base.fit(X_train, y_train)
-    res_baseline = evaluate_classifier(clf_base.predict(X_test), y_test,
+    res_baseline = evaluate_classifier(y_test, clf_base.predict(X_test),
                                        label="baseline_imbalanced")
 
     # ── GAN augmentation ──
@@ -334,7 +334,7 @@ def run_layer1_experiment():
     with Timer("GAN-augmented RF"):
         clf_gan = RandomForestClassifier(n_estimators=100, random_state=42, n_jobs=-1)
         clf_gan.fit(X_tr_gan, y_tr_gan)
-    res_gan = evaluate_classifier(clf_gan.predict(X_test), y_test,
+    res_gan = evaluate_classifier(y_test, clf_gan.predict(X_test),
                                   label="gan_augmented")
 
     # ── DDPM augmentation ──
@@ -356,7 +356,7 @@ def run_layer1_experiment():
     with Timer("DDPM-augmented RF"):
         clf_ddpm = RandomForestClassifier(n_estimators=100, random_state=42, n_jobs=-1)
         clf_ddpm.fit(X_tr_ddpm, y_tr_ddpm)
-    res_ddpm = evaluate_classifier(clf_ddpm.predict(X_test), y_test,
+    res_ddpm = evaluate_classifier(y_test, clf_ddpm.predict(X_test),
                                    label="ddpm_augmented")
 
     # ── Save ──
