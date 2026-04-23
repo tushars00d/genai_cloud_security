@@ -18,12 +18,12 @@ for d in [DATA_DIR, RESULTS_DIR, MODELS_DIR]:
 # ── LLM Provider ──────────────────────────────────────────────────────────────
 # Options: "groq" | "ollama" | "openai" | "anthropic"
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "groq")
-LLM_MODEL    = {
-    "groq":      "llama3-8b-8192",       # Free tier
+LLM_MODEL    = os.getenv("LLM_MODEL") or {
+    "groq":      "llama-3.1-8b-instant",  # Free-tier friendly Groq replacement for deprecated llama3-8b-8192
     "ollama":    "llama3.1",              # Fully local
     "openai":    "gpt-4o-mini",
     "anthropic": "claude-haiku-4-5-20251001",
-}.get(LLM_PROVIDER, "llama3-8b-8192")
+}.get(LLM_PROVIDER, "llama-3.1-8b-instant")
 
 GROQ_API_KEY      = os.getenv("GROQ_API_KEY", "")
 OPENAI_API_KEY    = os.getenv("OPENAI_API_KEY", "")

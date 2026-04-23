@@ -28,12 +28,20 @@ genai_cloud_security/
 
 1. Open [Google Colab](https://colab.research.google.com/).
 2. Select `Runtime -> Change runtime type -> T4 GPU`.
-3. Run the setup cell below.
+3. Run the setup cell below. It is safe to re-run if the repo already exists.
 
 ```python
 # Cell 1 - Clone and install
-!git clone https://github.com/tushars00d/genai_cloud_security.git
-%cd genai_cloud_security
+%cd /content
+import os
+if os.path.exists("/content/genai_cloud_security/.git"):
+    %cd /content/genai_cloud_security
+    !git fetch origin
+    !git reset --hard origin/main
+else:
+    !git clone https://github.com/tushars00d/genai_cloud_security.git /content/genai_cloud_security
+    %cd /content/genai_cloud_security
+
 !pip install -r requirements.txt
 ```
 

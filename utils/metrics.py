@@ -102,6 +102,7 @@ def plot_comparison_bar(results_list, metric="f1_score", title="Model Comparison
     ax.set_ylim(0, 1.05)
     ax.set_ylabel(metric.replace("_", " ").title(), fontsize=12)
     ax.set_title(title, fontsize=14)
+    ax.set_xticks(range(len(labels)))
     ax.set_xticklabels(labels, rotation=15, ha="right")
     ax.grid(axis="y", linestyle="--", alpha=0.4)
     plt.tight_layout()

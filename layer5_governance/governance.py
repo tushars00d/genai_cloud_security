@@ -135,10 +135,10 @@ def monitor_bias(predictions_df: pd.DataFrame) -> dict:
     for sev in overall_dist.index:
         overall = overall_dist.get(sev, 0)
         highconf = high_conf_dist.get(sev, 0)
-        bias_scores[sev] = round(abs(highconf - overall), 4)
+        bias_scores[str(sev)] = float(round(abs(highconf - overall), 4))
 
-    max_bias = max(bias_scores.values())
-    bias_detected = max_bias > 0.15  # 15% threshold
+    max_bias = float(max(bias_scores.values()))
+    bias_detected = bool(max_bias > 0.15)  # 15% threshold
 
     return {
         "bias_detected":    bias_detected,

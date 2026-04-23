@@ -22,6 +22,8 @@ import mlflow
 from config import DATA_DIR, RESULTS_DIR, MLFLOW_TRACKING_URI, EXPERIMENT_NAME, L3, LLM_PROVIDER, LLM_MODEL, GROQ_API_KEY
 from utils.metrics import save_results_csv, Timer
 
+_LLM_DISABLED_REASON = None
+
 
 # ── MITRE ATT&CK Knowledge Base ────────────────────────────────────────────────
 
@@ -56,6 +58,10 @@ def get_llm_response(prompt: str, system_prompt: str = "") -> str:
     Calls the configured LLM provider. Falls back to rule-based
     template if no API key is set (for demo / offline mode).
     """
+    global _LLM_DISABLED_REASON
+    if _LLM_DISABLED_REASON:
+        return _rule_based_fallback(prompt)
+
     if LLM_PROVIDER == "groq" and GROQ_API_KEY:
         return _call_groq(prompt, system_prompt)
     elif LLM_PROVIDER == "ollama":
@@ -65,6 +71,7 @@ def get_llm_response(prompt: str, system_prompt: str = "") -> str:
 
 
 def _call_groq(prompt, system_prompt):
+    global _LLM_DISABLED_REASON
     try:
         from groq import Groq
         client = Groq(api_key=GROQ_API_KEY)
@@ -75,7 +82,8 @@ def _call_groq(prompt, system_prompt):
         resp = client.chat.completions.create(model=LLM_MODEL, messages=msgs, max_tokens=800)
         return resp.choices[0].message.content
     except Exception as e:
-        print(f"  Groq error: {e}. Falling back to rule-based.")
+        _LLM_DISABLED_REASON = str(e)
+        print(f"  Groq error: {e}. Falling back to rule-based for the rest of this run.")
         return _rule_based_fallback(prompt)
 
 
