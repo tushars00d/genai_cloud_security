@@ -51,6 +51,27 @@ L2 = {
     "models": ["random_forest", "mlp", "attention_ids"],
 }
 
+# ── Layer 2 Research-Grade Experiment ─────────────────────────────────────────
+L2_RESEARCH = {
+    "enabled": True,
+    "test_split": 0.2,
+    "val_split": 0.2,
+    "random_state": 42,
+    "feature_selection_k": 18,
+    "oversample_minority": True,
+    "max_oversample_per_class": 2500,
+    "batch_size": 256,
+    "epochs": 60,
+    "patience": 8,
+    "learning_rate": 8e-4,
+    "weight_decay": 1e-4,
+    "focal_gamma": 2.0,
+    "adversarial_training": True,
+    "adversarial_eps": 0.05,
+    "attack_eval_eps": [0.02, 0.05, 0.10],
+    "denoiser_epochs": 25,
+}
+
 # ── Layer 3: Cognitive Analysis ────────────────────────────────────────────────
 L3 = {
     "chunk_size":        500,

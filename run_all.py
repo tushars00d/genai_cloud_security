@@ -45,6 +45,12 @@ def run_layer2():
     return run_layer2_experiment()
 
 
+def run_layer2_research():
+    print_header("LAYER 2: Research-Grade IDS Improvements")
+    from layer2_detection.research_grade_ids import run_research_grade_layer2
+    return run_research_grade_layer2()
+
+
 def run_layer3():
     print_header("LAYER 3: LLM + RAG Cognitive Analysis")
     from layer3_cognitive.run_rag_pipeline import run_layer3_experiment
@@ -109,6 +115,8 @@ def main():
     parser.add_argument("--quick",   action="store_true", help="Quick test mode")
     parser.add_argument("--skip-l1", action="store_true", help="Skip slow DDPM training")
     parser.add_argument("--skip-l3", action="store_true", help="Skip LLM layer")
+    parser.add_argument("--research-l2", action="store_true",
+                        help="Run improved Layer 2 experiment after the baseline Layer 2 pipeline")
     args = parser.parse_args()
 
     if args.quick:
@@ -138,12 +146,16 @@ def main():
             sys.exit(1)
         run_setup()
         results[f"l{args.layer}"] = layer_map[args.layer]()
+        if args.layer == 2 and args.research_l2:
+            results["l2_research"] = run_layer2_research()
     else:
         # Full pipeline
         run_setup()
         if not args.skip_l1:
             results["l1"] = run_layer1()
         results["l2"] = run_layer2()
+        if args.research_l2:
+            results["l2_research"] = run_layer2_research()
         if not args.skip_l3:
             results["l3"] = run_layer3()
         results["l4"] = run_layer4()

@@ -69,7 +69,74 @@ class AuditLogger:
 
 # ── Explainability Engine ──────────────────────────────────────────────────────
 
-def run_shap_explainability(clf, X_test, feature_names, label="ids_model"):
+def _normalise_feature_names(feature_names, n_features):
+    names = list(feature_names[:n_features])
+    if len(names) < n_features:
+        names.extend([f"feature_{i}" for i in range(len(names), n_features)])
+    return names
+
+
+def _prepare_shap_arrays(shap_values, n_features):
+    """
+    Return (summary_values, importance_values, local_values) for SHAP outputs.
+    Handles binary, multiclass list outputs, and multiclass 3D tensors.
+    """
+    if isinstance(shap_values, list):
+        arr = np.stack([np.asarray(v) for v in shap_values], axis=-1)
+    else:
+        arr = np.asarray(shap_values)
+
+    if arr.ndim == 3:
+        # Common shape: (n_samples, n_features, n_classes)
+        if arr.shape[1] == n_features:
+            summary_values = arr.mean(axis=2)
+            importance_values = np.abs(arr).mean(axis=(0, 2))
+            local_values = arr[0, :, int(np.argmax(np.abs(arr[0]).mean(axis=0)))]
+        # Alternate shape from some explainers: (n_classes, n_samples, n_features)
+        elif arr.shape[2] == n_features:
+            arr = np.moveaxis(arr, 0, -1)
+            summary_values = arr.mean(axis=2)
+            importance_values = np.abs(arr).mean(axis=(0, 2))
+            local_values = arr[0, :, int(np.argmax(np.abs(arr[0]).mean(axis=0)))]
+        else:
+            raise ValueError(f"Unsupported SHAP tensor shape {arr.shape}")
+    elif arr.ndim == 2:
+        summary_values = arr
+        importance_values = np.abs(arr).mean(axis=0)
+        local_values = arr[0]
+    else:
+        raise ValueError(f"Unsupported SHAP output shape {arr.shape}")
+
+    return summary_values, np.asarray(importance_values).reshape(-1), np.asarray(local_values).reshape(-1)
+
+
+def _save_lime_fallback(clf, sample, background, feature_names, label):
+    try:
+        from lime.lime_tabular import LimeTabularExplainer
+        explainer = LimeTabularExplainer(
+            background,
+            feature_names=feature_names,
+            mode="classification",
+            discretize_continuous=False,
+        )
+        exp = explainer.explain_instance(sample, clf.predict_proba, num_features=min(15, len(feature_names)))
+        fig = exp.as_pyplot_figure()
+        out_png = RESULTS_DIR / f"layer5_lime_local_{label}.png"
+        fig.tight_layout()
+        fig.savefig(out_png, dpi=150)
+        plt.close(fig)
+        explanation = [{"feature": str(k), "weight": float(v)} for k, v in exp.as_list()]
+        out_json = RESULTS_DIR / f"layer5_lime_local_{label}.json"
+        with open(out_json, "w") as f:
+            json.dump({"label": label, "method": "lime_fallback", "explanation": explanation}, f, indent=2)
+        print(f"  LIME fallback saved -> {out_png}")
+        return {"lime_png": str(out_png), "lime_json": str(out_json), "explanation": explanation}
+    except Exception as e:
+        print(f"  LIME fallback failed: {e}")
+        return {}
+
+
+def run_shap_explainability(clf, X_test, feature_names, label="ids_model", X_background=None):
     """
     Compute SHAP values for IDS classifier.
     Uses TreeExplainer for Random Forest (fast, no sampling needed).
@@ -77,38 +144,71 @@ def run_shap_explainability(clf, X_test, feature_names, label="ids_model"):
     """
     try:
         import shap
+        X_test = np.asarray(X_test, dtype=np.float32)
+        sample = X_test[:min(200, len(X_test))]
+        feature_names = _normalise_feature_names(feature_names, sample.shape[1])
+
         print("  Computing SHAP values (TreeExplainer)...")
         explainer = shap.TreeExplainer(clf)
-        # Use a sample for speed
-        sample = X_test[:min(200, len(X_test))]
         shap_values = explainer.shap_values(sample)
-
-        # For multi-class, shap_values is a list — take class 0 (BENIGN) vs rest
-        if isinstance(shap_values, list):
-            sv = np.abs(np.array(shap_values)).mean(axis=0).mean(axis=0)
-        else:
-            sv = np.abs(shap_values).mean(axis=0)
+        summary_values, sv, local_values = _prepare_shap_arrays(shap_values, sample.shape[1])
 
         # Top features
-        feature_importance = pd.Series(sv, index=feature_names[:len(sv)])
+        feature_importance = pd.Series(sv[:len(feature_names)], index=feature_names)
         top_features = feature_importance.nlargest(15)
 
-        # Plot
+        # Global feature importance plot.
         fig, ax = plt.subplots(figsize=(10, 6))
         top_features.sort_values().plot(kind="barh", color="#2563EB", ax=ax)
         ax.set_title(f"Layer 5: SHAP Feature Importance — {label}", fontsize=13)
         ax.set_xlabel("Mean |SHAP value|")
         plt.tight_layout()
-        out = RESULTS_DIR / f"layer5_shap_{label}.png"
-        fig.savefig(out, dpi=150)
+        importance_png = RESULTS_DIR / f"layer5_shap_importance_{label}.png"
+        fig.savefig(importance_png, dpi=150)
         plt.close()
-        print(f"  SHAP chart saved → {out}")
 
-        return top_features.to_dict()
+        # SHAP summary plot.
+        summary_png = RESULTS_DIR / f"layer5_shap_summary_{label}.png"
+        shap.summary_plot(summary_values, sample, feature_names=feature_names, show=False, max_display=15)
+        plt.tight_layout()
+        plt.savefig(summary_png, dpi=150, bbox_inches="tight")
+        plt.close()
 
+        # Local explanation plot for the first analysed prediction.
+        local = pd.Series(local_values[:len(feature_names)], index=feature_names).sort_values(key=np.abs).tail(12)
+        fig, ax = plt.subplots(figsize=(10, 5))
+        colors = ["#DC2626" if v > 0 else "#2563EB" for v in local.values]
+        local.plot(kind="barh", color=colors, ax=ax)
+        ax.set_title(f"Layer 5: Local SHAP Explanation — {label}", fontsize=13)
+        ax.set_xlabel("SHAP value")
+        plt.tight_layout()
+        local_png = RESULTS_DIR / f"layer5_shap_local_{label}.png"
+        fig.savefig(local_png, dpi=150)
+        plt.close(fig)
+
+        explanation = {
+            "label": label,
+            "method": "shap_tree",
+            "sample_count": int(len(sample)),
+            "feature_count": int(sample.shape[1]),
+            "top_features": {str(k): float(v) for k, v in top_features.items()},
+            "local_explanation": {str(k): float(v) for k, v in local.sort_values(key=np.abs, ascending=False).items()},
+            "artifacts": {
+                "importance_png": str(importance_png),
+                "summary_png": str(summary_png),
+                "local_png": str(local_png),
+            },
+        }
+        out_json = RESULTS_DIR / f"layer5_shap_explanation_{label}.json"
+        with open(out_json, "w") as f:
+            json.dump(explanation, f, indent=2)
+        print(f"  SHAP artifacts saved -> {importance_png}, {summary_png}, {local_png}")
+        return explanation
     except Exception as e:
-        print(f"  SHAP error: {e}. Skipping SHAP analysis.")
-        return {}
+        print(f"  SHAP error: {e}. Trying LIME fallback.")
+        background = np.asarray(X_background if X_background is not None else X_test[:min(500, len(X_test))], dtype=np.float32)
+        names = _normalise_feature_names(feature_names, background.shape[1])
+        return _save_lime_fallback(clf, np.asarray(X_test[0], dtype=np.float32), background, names, label)
 
 
 # ── Bias Monitor ───────────────────────────────────────────────────────────────
@@ -362,16 +462,13 @@ def run_layer5_experiment():
         X_tr, X_te, y_tr, y_te = train_test_split(X, y, test_size=0.2, random_state=42)
         clf = RandomForestClassifier(n_estimators=50, random_state=42, n_jobs=-1)
         clf.fit(X_tr, y_tr)
-        feature_names = [
-            "Flow Duration","Total Fwd Pkts","Total Bwd Pkts",
-            "Fwd Pkt Len","Bwd Pkt Len","Flow Bytes/s","Flow Pkts/s",
-            "Flow IAT Mean","Flow IAT Std","Fwd IAT Total","Bwd IAT Total",
-            "SYN Flag","RST Flag","PSH Flag","ACK Flag",
-            "Avg Pkt Size","Init Win Fwd","Init Win Bwd",
-            "Fwd Seg Size","Bwd Pkt Max","Bwd Pkt Mean",
-            "Bwd IAT Total2","Fwd IAT2","Flow Duration2",
-        ]
-        shap_results = run_shap_explainability(clf, X_te, feature_names, "random_forest_ids")
+        feature_names = [f"feature_{i}" for i in range(X.shape[1])]
+        data_path = Path(__file__).parent.parent / "data" / "cicids_sample.csv"
+        if data_path.exists():
+            raw_cols = [c for c in pd.read_csv(data_path, nrows=1).columns if c != "Label"]
+            if len(raw_cols) == X.shape[1]:
+                feature_names = raw_cols
+        shap_results = run_shap_explainability(clf, X_te, feature_names, "random_forest_ids", X_background=X_tr)
     except Exception as e:
         print(f"  SHAP skipped (model load error): {e}")
 

@@ -73,7 +73,14 @@ else:
 !python run_all.py --skip-l1
 ```
 
-8. Optional LLM setup for Layer 3.
+8. Optional research-grade Layer 2 experiment.
+
+```python
+# Adds the improved macro-F1-focused IDS experiment after the baseline Layer 2 run
+!python run_all.py --quick --skip-l1 --research-l2
+```
+
+9. Optional LLM setup for Layer 3.
 
 ```python
 import os
@@ -99,6 +106,8 @@ All outputs are written to `results/`:
 ## Dissertation Notes
 
 See `docs/5l_model_research_review.md` for the technical explanation of the 5L Model, gap analysis, baselines, examiner questions, and dissertation-ready methodology text.
+
+See `docs/research_grade_improvements.md` for the experimental branch improvements, artifacts, and limitations.
 
 ---
 
